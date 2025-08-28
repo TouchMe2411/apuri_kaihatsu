@@ -10,6 +10,8 @@ import PostController from './routes/post'
 import AdminController from './routes/admin'
 import GroupController from './routes/group'
 import FormController from './routes/form'
+import DashboardController from './routes/dashboard'
+import { initScheduledJobs } from './scheduled-jobs';
 
 console.log('starting app');
 
@@ -20,7 +22,13 @@ const app = new App([
     new PostController(),
     new AdminController(),
     new GroupController(),
-    new FormController()
+    new FormController(),
+    new DashboardController()
 ]);
+
+// Initialize scheduled tasks
+initScheduledJobs();
+
+console.log('app started');
 
 export const handler: serverless.Handler = serverless(app.listen());

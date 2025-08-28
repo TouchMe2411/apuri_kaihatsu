@@ -7,7 +7,7 @@ interface User {
   sub_id?: string;
 }
 
-const sub_id = "1";
+const generateUniqueId = () => Math.random().toString(36).substr(2, 9);
 
 const mockDatabase: { [email: string]: User } = {
   "admin@gmail.com": {
@@ -15,7 +15,7 @@ const mockDatabase: { [email: string]: User } = {
     accessToken: "mockAccessToken",
     refreshToken: "mockRefreshToken",
     password: "password",
-    sub_id: sub_id,
+    sub_id: "1",
   },
 };
 
@@ -95,8 +95,13 @@ export class MockCognitoClient {
     if (mockDatabase[email]) {
       throw new Error("Email already exists");
     }
-    mockDatabase[email] = { email, password: "tempPassword", sub_id: sub_id };
-    return { sub_id: sub_id };
+    const uniqueSubId = generateUniqueId();
+    mockDatabase[email] = { 
+      email, 
+      password: "tempPassword", 
+      sub_id: uniqueSubId 
+    };
+    return { sub_id: uniqueSubId };
   }
 
   static async accessToken(accessToken: string) {
