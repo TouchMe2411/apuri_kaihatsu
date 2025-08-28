@@ -111,8 +111,10 @@ CREATE TABLE `Post`
     `priority`    enum ('low', 'medium', 'high') NOT NULL DEFAULT 'low',
     `admin_id`    int                            NOT NULL,
     `sent_at`     datetime                       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `delivery_at` datetime                       NULL,
     `edited_at`   datetime                       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `school_id`   int                            NOT NULL,
+    `is_processed` TINYINT(1)                    NOT NULL DEFAULT '1',
     PRIMARY KEY (`id`),
     KEY `idx_post_school_id` (`school_id`),
     CONSTRAINT `Post_ibfk_1` FOREIGN KEY (`school_id`) REFERENCES `School` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
@@ -217,15 +219,31 @@ CREATE TABLE `Student`
 
 CREATE TABLE `StudentGroup`
 (
-    `id`         int          NOT NULL AUTO_INCREMENT,
-    `name`       varchar(255) NOT NULL,
-    `created_at` datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `school_id`  int          NOT NULL,
+    `id`              int          NOT NULL AUTO_INCREMENT,
+    `name`            varchar(255) NOT NULL,
+    `created_at`      datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `school_id`       int          NOT NULL,
+    `parent_group_id` int          NULL,     -- Добавить эту строку
     PRIMARY KEY (`id`),
     KEY `idx_studentgroup_school_id` (`school_id`),
-    CONSTRAINT `StudentGroup_ibfk_1` FOREIGN KEY (`school_id`) REFERENCES `School` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+    KEY `fk_parent_group` (`parent_group_id`),  -- Добавить индекс
+    CONSTRAINT `StudentGroup_ibfk_1` FOREIGN KEY (`school_id`) REFERENCES `School` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT `fk_parent_group` FOREIGN KEY (`parent_group_id`) REFERENCES `StudentGroup` (`id`) ON DELETE SET NULL  -- Добавить внешний ключ
 ) ENGINE = InnoDB
   AUTO_INCREMENT = 22
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE `GroupParentRelation` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `child_group_id` int NOT NULL,
+  `parent_group_id` int NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_relation` (`child_group_id`, `parent_group_id`),
+  CONSTRAINT `fk_child_group` FOREIGN KEY (`child_group_id`) REFERENCES `StudentGroup` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_parent_group_relation` FOREIGN KEY (`parent_group_id`) REFERENCES `StudentGroup` (`id`) ON DELETE CASCADE
+) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
