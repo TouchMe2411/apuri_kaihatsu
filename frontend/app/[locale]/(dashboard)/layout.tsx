@@ -1,7 +1,14 @@
 "use client";
 
 import { Link } from "@/navigation";
-import { Bell, CircleUser, Menu, Package2 } from "lucide-react";
+import {
+  Bell,
+  CircleUser,
+  Menu,
+  Package2,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,6 +25,7 @@ import { signIn, signOut, useSession } from "next-auth/react";
 import { User } from "next-auth";
 import NavLinks from "@/components/NavLinks";
 import LanguageSelect from "@/components/LanguageSelect";
+import { useState, useEffect } from "react";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession({
@@ -25,37 +33,71 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   });
   const t = useTranslations("app");
   const tName = useTranslations("names");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Load sidebar state from localStorage on component mount
+  useEffect(() => {
+    const savedState = localStorage.getItem("sidebarOpen");
+    if (savedState !== null) {
+      setSidebarOpen(savedState === "true");
+    }
+  }, []);
+
+  // Save sidebar state to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem("sidebarOpen", String(sidebarOpen));
+  }, [sidebarOpen]);
+
+  const toggleSidebar = () => {
+    setSidebarOpen((prev) => !prev);
+  };
 
   const user = session?.user as User;
 
   if (session?.error === "RefreshAccessTokenError") signIn();
 
   return (
-    <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr] relative">
-      <div className="hidden border-r bg-muted/40 md:block ">
-        <div className="flex h-full max-h-screen flex-col gap-2 sticky top-0 z-50">
-          <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
+    <div
+      className={`grid min-h-screen w-full transition-all duration-300 ${
+        sidebarOpen
+          ? "md:grid-cols-[240px_1fr] lg:grid-cols-[280px_1fr]"
+          : "grid-cols-[0px_1fr]"
+      } relative`}
+    >
+      {/* Desktop Sidebar */}
+      <div
+        className={`hidden md:block relative transition-all duration-300 ${
+          sidebarOpen ? "opacity-100 w-full" : "opacity-0 w-0 overflow-hidden"
+        }`}
+      >
+        <div className="absolute inset-0 bg-gradient-primary opacity-10 dark:opacity-20"></div>
+        <div className="flex h-full max-h-screen flex-col gap-2 sticky top-0 z-40 backdrop-blur-sm">
+          <div className="flex h-16 items-center border-b border-b-primary/20 px-6 lg:h-[60px]">
             <Link
               href="/"
-              className="flex items-center gap-2 font-semibold leading-none"
+              className="flex items-center gap-2 font-semibold leading-none text-gradient-primary"
             >
-              <Package2 className="h-6 w-6" />
-              <span className="">{session && session?.schoolName}</span>
+              <Package2 className="h-6 w-6 text-primary" />
+              <span className="text-lg">{session && session?.schoolName}</span>
             </Link>
-            {/* <Button variant="outline" size="icon" className="ml-auto h-8 w-8">
-              <Bell className="h-4 w-4" />
-              <span className="sr-only">{t("notifications")}</span>
-            </Button> */}
           </div>
-          <div className="flex-1">
-            <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
+          <div className="flex-1 px-4 py-4">
+            <nav className="grid items-start gap-2 text-sm font-medium">
               <NavLinks user={user} />
             </nav>
           </div>
+          <div className="mt-auto p-4 border-t border-t-primary/20">
+            <div className="flex items-center gap-2 justify-between">
+              <LanguageSelect />
+              <ToggleMode />
+            </div>
+          </div>
         </div>
       </div>
+
       <div className="flex flex-col">
-        <header className="flex h-14 items-center gap-4 border-b bg-background px-4 lg:h-[60px] lg:px-6 sticky top-0 z-50">
+        <header className="flex h-16 items-center gap-4 border-b bg-background/80 backdrop-blur-sm px-6 lg:h-[60px] sticky top-0 z-50">
+          {/* Mobile Menu Button - Only visible on mobile */}
           <Sheet>
             <SheetTrigger asChild>
               <Button
@@ -67,45 +109,75 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <span className="sr-only">{t("menu")}</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="flex flex-col">
-              <nav className="grid gap-2 text-lg font-medium">
-                <Link
-                  href="#"
-                  className="flex items-center gap-2 text-lg font-semibold"
-                >
-                  <Package2 className="h-6 w-6" />
-                  <span className="sr-only">{session?.schoolName}</span>
-                </Link>
-                <NavLinks user={user} />
-              </nav>
+            <SheetContent side="left" className="w-[240px] p-0">
+              <div className="relative h-full">
+                <div className="absolute inset-0 bg-gradient-primary opacity-10 dark:opacity-20"></div>
+                <div className="relative h-full flex flex-col">
+                  <div className="flex h-16 items-center border-b border-b-primary/20 px-6">
+                    <Link
+                      href="/"
+                      className="flex items-center gap-2 font-semibold leading-none text-gradient-primary"
+                    >
+                      <Package2 className="h-6 w-6 text-primary" />
+                      <span className="text-lg">{session?.schoolName}</span>
+                    </Link>
+                  </div>
+                  <nav className="grid gap-2 p-4 text-md font-medium">
+                    <NavLinks user={user} />
+                  </nav>
+                  <div className="mt-auto p-4 border-t border-t-primary/20">
+                    <div className="flex items-center gap-2 justify-between">
+                      <LanguageSelect />
+                      <ToggleMode />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </SheetContent>
           </Sheet>
-          <div className="sm:flex gap-2 hidden">
-            <LanguageSelect />
-            <ToggleMode />
-          </div>
-          <div className="flex items-center justify-end w-full gap-2">
+
+          {/* Desktop Sidebar Toggle Button - Only visible on desktop */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebar}
+            className="hidden md:flex hover:bg-background"
+            title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+          >
+            {sidebarOpen ? (
+              <PanelLeftClose className="h-5 w-5 text-primary" />
+            ) : (
+              <PanelLeftOpen className="h-5 w-5 text-primary" />
+            )}
+            <span className="sr-only">
+              {sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            </span>
+          </Button>
+
+          <div className="flex items-center justify-end w-full gap-4">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <div className="flex items-center gap-2">
-                  <span className="cursor-pointer">
+                <div className="flex items-center gap-2 cursor-pointer">
+                  <span className="hidden sm:block font-medium">
                     {user && tName("name", { ...user })}
                   </span>
                   <Button
                     variant="secondary"
                     size="icon"
-                    className="rounded-full"
+                    className="rounded-full bg-gradient-primary text-white hover:opacity-90"
                   >
                     <CircleUser className="h-5 w-5" />
                     <span className="sr-only">{t("account")}</span>
                   </Button>
                 </div>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>
                   <div className="flex flex-col">
-                    <div>{t("account")}</div>
-                    <div className="text-gray-600">{user?.email}</div>
+                    <div className="font-semibold">{t("account")}</div>
+                    <div className="text-muted-foreground text-sm">
+                      {user?.email}
+                    </div>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -115,18 +187,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <DropdownMenuItem onClick={async () => await signOut()}>
                   {t("logout")}
                 </DropdownMenuItem>
-                <div className="sm:hidden">
-                  <DropdownMenuSeparator />
-                  <div className="flex gap-2">
-                    <LanguageSelect />
-                    <ToggleMode />
-                  </div>
-                </div>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </header>
-        <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
+        <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-background/60">
           {children}
         </main>
       </div>

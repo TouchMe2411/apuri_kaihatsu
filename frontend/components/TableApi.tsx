@@ -14,13 +14,15 @@ import {
 } from "@tanstack/react-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTranslations } from "next-intl";
+import { cn } from "@/lib/utils";
 
 interface TableApiProps<T> {
   data: T[] | null;
   columns: ColumnDef<T>[];
+  deletingRows?: number[];
 }
 
-function TableApi<T>({ data, columns }: TableApiProps<T>) {
+function TableApi<T>({ data, columns, deletingRows = [] }: TableApiProps<T>) {
   const t = useTranslations("table");
 
   const table = useReactTable({
@@ -52,18 +54,27 @@ function TableApi<T>({ data, columns }: TableApiProps<T>) {
         {data === null ? (
           <SkeletonLoader rowCount={5} columnCount={columns.length} />
         ) : table.getRowModel().rows.length ? (
-          table.getRowModel().rows.map((row) => (
-            <TableRow
-              key={row.id}
-              data-state={row.getIsSelected() && "selected"}
-            >
-              {row.getVisibleCells().map((cell) => (
-                <TableCell key={cell.id}>
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </TableCell>
-              ))}
-            </TableRow>
-          ))
+          table.getRowModel().rows.map((row) => {
+            const rowId = (row.original as any)?.id;
+            const isDeleting =
+              rowId !== undefined && deletingRows.includes(rowId);
+
+            return (
+              <TableRow
+                key={row.id}
+                data-state={row.getIsSelected() && "selected"}
+                className={cn(
+                  isDeleting && "opacity-50 transition-opacity duration-500"
+                )}
+              >
+                {row.getVisibleCells().map((cell) => (
+                  <TableCell key={cell.id}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </TableCell>
+                ))}
+              </TableRow>
+            );
+          })
         ) : (
           <TableRow>
             <TableCell colSpan={columns.length} className="h-24 text-center">

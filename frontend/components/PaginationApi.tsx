@@ -26,9 +26,9 @@ const PaginationApi = ({
           />
         </PaginationItem>
         {data &&
-          data?.links.map((page, index) =>
+          (data?.links || []).map((page, index) =>
             page === "..." ? (
-              <PaginationItem key={page + index}>
+              <PaginationItem key={`ellipsis-${index}`}>
                 <PaginationEllipsis />
               </PaginationItem>
             ) : (

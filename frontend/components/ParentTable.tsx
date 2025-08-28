@@ -8,7 +8,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,9 +30,9 @@ import { SkeletonLoader } from "./TableApi";
 import useApiQuery from "@/lib/useApiQuery";
 
 export function ParentTable({
-  selectedParents,
-  setSelectedParents,
-}: {
+                              selectedParents,
+                              setSelectedParents,
+                            }: {
   selectedParents: Parent[];
   setSelectedParents: React.Dispatch<React.SetStateAction<Parent[]>>;
 }) {
@@ -41,116 +41,147 @@ export function ParentTable({
   const { data: session } = useSession();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState<string>("");
-  const [rowSelection, setRowSelection] = React.useState({});
   const { data, isLoading } = useApiQuery<ParentApi>(
     `parent/list?page=${page}&name=${search}`,
     ["parents", page, search]
   );
-  const { data: selectedParentsData } = useQuery<{ parents: Parent[] }>({
-    queryKey: ["selectedParents", rowSelection],
-    queryFn: async () => {
-      const parentIds = Object.keys(rowSelection).map((e) => Number(e));
-      const data = { parentIds };
-      if (parentIds.length === 0) {
-        return { parents: [] };
-      }
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/parent/ids`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.sessionToken}`,
-          },
-          body: JSON.stringify(data),
+
+  const selectedParentIds = useMemo(
+    () => new Set(selectedParents.map((parent) => parent.id.toString())),
+    [selectedParents]
+  );
+
+  const rowSelection = useMemo(() => {
+    const selection: Record<string, boolean> = {};
+    selectedParentIds.forEach((id) => {
+      selection[id] = true;
+    });
+    return selection;
+  }, [selectedParentIds]);
+
+  const { data: selectedParentsData, refetch: refetchSelectedParents } =
+    useQuery<{ parents: Parent[] }>({
+      queryKey: ["selectedParents", Array.from(selectedParentIds)],
+      queryFn: async () => {
+        if (selectedParentIds.size === 0) {
+          return { parents: [] };
         }
-      );
-
-      if (!response.ok) {
-        const data = await response.json();
-        setSelectedParents(data.error);
-      }
-      return response.json();
-    },
-    enabled: !!session,
-  });
-
-  useEffect(() => {
-    if (selectedParentsData) {
-      setSelectedParents(selectedParentsData.parents);
-    }
-  }, [selectedParentsData, setSelectedParents]);
-
-  const columns: ColumnDef<Parent>[] = [
-    {
-      id: "selectParent",
-      header: ({ table }) => (
-        <Checkbox
-          checked={
-            table.getIsAllPageRowsSelected() ||
-            (table.getIsSomePageRowsSelected() && "indeterminate")
+        const data = { parentIds: Array.from(selectedParentIds) };
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/parent/ids`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session?.sessionToken}`,
+            },
+            body: JSON.stringify(data),
           }
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
-        />
-      ),
-      enableSorting: false,
-      enableHiding: false,
-    },
-    {
-      accessorKey: "name",
-      header: t("name"),
-      cell: ({ row }) => (
-        <div className="capitalize">{tName("name", { ...row?.original })}</div>
-      ),
-    },
-    {
-      accessorKey: "email",
-      header: t("email"),
-      cell: ({ row }) => (
-        <div className="lowercase">{row.getValue("email")}</div>
-      ),
-    },
-    {
-      accessorKey: "phone_number",
-      header: t("phoneNumber"),
-      cell: ({ row }) => (
-        <div className="text-left">{row.getValue("phone_number")}</div>
-      ),
-    },
-  ];
+        );
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error);
+        }
+        return response.json();
+      },
+      enabled: !!session && selectedParentIds.size > 0,
+    });
+
+  const columns: ColumnDef<Parent>[] = useMemo(
+    () => [
+      {
+        id: "selectParent",
+        header: ({ table }) => (
+          <Checkbox
+            checked={
+              table.getIsAllPageRowsSelected() ||
+              (table.getIsSomePageRowsSelected() && "indeterminate")
+            }
+            onCheckedChange={(value) =>
+              table.toggleAllPageRowsSelected(!!value)
+            }
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label="Select row"
+          />
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      },
+      {
+        accessorKey: "name",
+        header: t("name"),
+        cell: ({ row }) => (
+          <div className="capitalize">
+            {tName("name", { ...row?.original } as any)}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "email",
+        header: t("email"),
+        cell: ({ row }) => (
+          <div className="lowercase">{row.getValue("email")}</div>
+        ),
+      },
+      {
+        accessorKey: "phone_number",
+        header: t("phoneNumber"),
+        cell: ({ row }) => (
+          <div className="text-left">{row.getValue("phone_number")}</div>
+        ),
+      },
+    ],
+    [t, tName]
+  );
 
   const table = useReactTable({
-    data: React.useMemo(() => data?.parents ?? [], [data]),
+    data: useMemo(() => data?.parents ?? [], [data]),
     columns,
     getCoreRowModel: getCoreRowModel(),
-    onRowSelectionChange: setRowSelection,
+    onRowSelectionChange: (updater) => {
+      if (typeof updater === "function") {
+        const newSelection = updater(rowSelection);
+        const newSelectedParents =
+          data?.parents.filter((parent) => newSelection[parent.id]) || [];
+        setSelectedParents((prev) => {
+          const prevIds = new Set(prev.map((p) => p.id));
+          return [
+            ...prev.filter((p) => newSelection[p.id]),
+            ...newSelectedParents.filter((p) => !prevIds.has(p.id)),
+          ];
+        });
+      }
+    },
     getRowId: (row) => row.id.toString(),
     state: {
       rowSelection,
     },
   });
 
-  useEffect(() => {
-    table.getRowModel().rows.forEach((row) => {
-      if (selectedParents.find((parent) => parent.id === row.original.id)) {
-        row.toggleSelected(true);
-      } else {
-        row.toggleSelected(false);
-      }
-    });
-  }, [selectedParents, table]);
+  const handleDeleteParent = useCallback(
+    (parent: Parent) => {
+      setSelectedParents((prev) => prev.filter((p) => p.id !== parent.id));
+    },
+    [setSelectedParents]
+  );
 
-  function handleDeleteParent(parent: Parent) {
-    setSelectedParents((prev) => prev.filter((s) => s.id !== parent.id));
-  }
+  useEffect(() => {
+    if (selectedParentsData) {
+      setSelectedParents((prevSelected) => {
+        const newSelectedMap = new Map(
+          selectedParentsData.parents.map((p) => [p.id, p])
+        );
+        return prevSelected.map((p) => newSelectedMap.get(p.id) || p);
+      });
+    }
+  }, [selectedParentsData, setSelectedParents]);
 
   return (
     <div className="w-full space-y-4 mt-4">
@@ -162,7 +193,7 @@ export function ParentTable({
               className="cursor-pointer"
               onClick={() => handleDeleteParent(parent)}
             >
-              {tName("name", { ...parent })}
+              {tName("name", { ...parent } as any)}
               <Trash2 className="h-4" />
             </Badge>
           ))}
@@ -188,9 +219,9 @@ export function ParentTable({
                     {header.isPlaceholder
                       ? null
                       : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
+                        header.column.columnDef.header,
+                        header.getContext()
+                      )}
                   </TableHead>
                 ))}
               </TableRow>

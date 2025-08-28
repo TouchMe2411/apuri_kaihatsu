@@ -2,13 +2,12 @@
 
 import * as React from "react";
 import {
-  ColumnDef,
   flexRender,
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,10 +19,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Group from "@/types/group";
-import { useSession } from "next-auth/react";
 import GroupApi from "@/types/groupApi";
 import PaginationApi from "./PaginationApi";
-import { Badge } from "./ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Trash2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { SkeletonLoader } from "./TableApi";
@@ -37,54 +35,65 @@ export function GroupTable({
   setSelectedGroups: React.Dispatch<React.SetStateAction<Group[]>>;
 }) {
   const t = useTranslations("GroupTable");
-  const { data: session } = useSession();
+  const tg = useTranslations("groups"); // moved out of cell
+
   const [page, setPage] = useState(1);
   const [searchName, setSearchName] = useState("");
   const { data } = useApiQuery<GroupApi>(
     `group/list?page=${page}&name=${searchName}`,
     ["groups", page, searchName]
   );
-  const [rowSelection, setRowSelection] = React.useState({});
-  const { data: selectedGroupData } = useQuery<{ groupList: Group[] }>({
-    queryKey: ["selectedGroups", rowSelection],
+
+  const selectedGroupIds = useMemo(
+    () => new Set(selectedGroups.map((group) => group.id.toString())),
+    [selectedGroups]
+  );
+
+  const rowSelection = useMemo(() => {
+    const selection: Record<string, boolean> = {};
+    selectedGroupIds.forEach((id) => {
+      selection[id] = true;
+    });
+    return selection;
+  }, [selectedGroupIds]);
+
+  const { data: selectedGroupData } = useQuery<{
+    groupList: Group[];
+  }>({
+    queryKey: ["selectedGroups", Array.from(selectedGroupIds)],
     queryFn: async () => {
-      const groupIds = Object.keys(rowSelection).map((e) => Number(e));
-      if (groupIds.length === 0) {
+      if (selectedGroupIds.size === 0) {
         return { groupList: [] };
       }
-      const data = { groupIds };
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("No authentication token found");
+      }
+      const body = { groupIds: Array.from(selectedGroupIds) };
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/group/ids`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.sessionToken}`,
+            Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(data),
+          body: JSON.stringify(body),
         }
       );
-
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error);
       }
-
       return response.json();
     },
-    enabled: !!session?.sessionToken,
+    enabled: selectedGroupIds.size > 0,
   });
 
-  useEffect(() => {
-    if (selectedGroupData) {
-      setSelectedGroups(selectedGroupData.groupList);
-    }
-  }, [selectedGroupData, setSelectedGroups]);
-
-  const columns: ColumnDef<Group>[] = [
+  const columns = [
     {
       id: "select",
-      header: ({ table }) => (
+      header: ({ table }: { table: any }) => (
         <Checkbox
           checked={
             table.getIsAllPageRowsSelected() ||
@@ -94,7 +103,7 @@ export function GroupTable({
           aria-label="Select all"
         />
       ),
-      cell: ({ row }) => (
+      cell: ({ row }: { row: any }) => (
         <Checkbox
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
@@ -107,45 +116,81 @@ export function GroupTable({
     {
       accessorKey: "name",
       header: t("groupName"),
-      cell: ({ row }) => (
-        <div className="capitalize">{row.getValue("name")}</div>
-      ),
+      cell: ({ row }: { row: any }) => {
+        const g = row.original as Group;
+        const isParent = (g.child_groups?.length ?? 0) > 0;
+        const isChild = (g.parent_groups?.length ?? 0) > 0;
+        const parentName = isChild ? g.parent_groups?.[0]?.name : undefined;
+
+        return (
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{g.name}</span>
+            {isParent && (
+              <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                {tg("parentGroup")}
+              </Badge>
+            )}
+            {isChild && (
+              <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                {parentName
+                  ? tg("childOf", { name: parentName })
+                  : tg("childGroup")}
+              </Badge>
+            )}
+          </div>
+        );
+      },
     },
     {
       accessorKey: "member_count",
-      header: ({ column }) => (
-        <div className="capitalize">{t("studentCount")}</div>
-      ),
-      cell: ({ row }) => (
+      header: () => <div className="capitalize">{t("studentCount")}</div>,
+      cell: ({ row }: { row: any }) => (
         <div className="lowercase">{row.getValue("member_count")}</div>
       ),
     },
   ];
 
   const table = useReactTable({
-    data: React.useMemo(() => data?.groups ?? [], [data]),
+    data: useMemo(() => data?.groups ?? [], [data]),
     columns,
     getCoreRowModel: getCoreRowModel(),
-    onRowSelectionChange: setRowSelection,
+    onRowSelectionChange: (updater) => {
+      if (typeof updater === "function") {
+        const newSelection = updater(rowSelection);
+        const newSelectedGroups =
+          data?.groups.filter((group) => newSelection[group.id]) || [];
+        setSelectedGroups((prev) => {
+          const prevIds = new Set(prev.map((g) => g.id));
+          return [
+            ...prev.filter((g) => newSelection[g.id]),
+            ...newSelectedGroups.filter((g) => !prevIds.has(g.id)),
+          ];
+        });
+      }
+    },
     getRowId: (row) => row.id.toString(),
     state: {
       rowSelection,
     },
   });
 
-  useEffect(() => {
-    table.getRowModel().rows.forEach((row) => {
-      if (selectedGroups.find((group) => group.id === row.original.id)) {
-        row.toggleSelected(true);
-      } else {
-        row.toggleSelected(false);
-      }
-    });
-  }, [selectedGroups, table]);
+  const handleDeleteGroup = useCallback(
+    (group: Group) => {
+      setSelectedGroups((prev) => prev.filter((g) => g.id !== group.id));
+    },
+    [setSelectedGroups]
+  );
 
-  function handleDeleteGroup(group: Group) {
-    setSelectedGroups((prev) => prev.filter((g) => g.id !== group.id));
-  }
+  useEffect(() => {
+    if (selectedGroupData) {
+      setSelectedGroups((prevSelected) => {
+        const newSelectedMap = new Map(
+          selectedGroupData.groupList.map((g) => [g.id, g])
+        );
+        return prevSelected.map((g) => newSelectedMap.get(g.id) || g);
+      });
+    }
+  }, [selectedGroupData, setSelectedGroups]);
 
   return (
     <div className="w-full space-y-4 mt-4">

@@ -1,21 +1,32 @@
 import { toast } from "@/components/ui/use-toast";
-import { MutationOptions, useMutation } from "@tanstack/react-query";
+import { MutationOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import { useTranslations } from "next-intl";
 import HttpError from "./HttpError";
 
+// Получаем текущий язык из URL
+const getCurrentLocale = () => {
+  if (typeof window !== "undefined") {
+    const locale = window.location.pathname.split("/")[1];
+    return ["en", "ru", "ja", "uz"].includes(locale) ? locale : "en";
+  }
+  return "en";
+};
+
 export default function useApiMutation<T>(
   mutationUrl: string,
-  method: string,
-  mutationKey: unknown[],
+  method: "POST" | "PUT" | "DELETE" | "PATCH" = "POST",
+  mutationKey: unknown[] = [],
   options: MutationOptions<T, HttpError, any, unknown> = {}
 ) {
   const { data: session } = useSession();
   const t = useTranslations("errors");
+  const queryClient = useQueryClient();
 
-  return useMutation<T, HttpError>({
+  return useMutation<T, HttpError, any, unknown>({
     mutationKey,
     mutationFn: async (data: any = {}): Promise<T> => {
+      const locale = getCurrentLocale();
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/${mutationUrl}`,
         {
@@ -23,28 +34,30 @@ export default function useApiMutation<T>(
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${session?.sessionToken}`,
+            "Accept-Language": locale, // добавили заголовок языка
           },
           body: JSON.stringify(data),
         }
       );
       if (!res.ok) {
         const error = await res.json();
-        throw new HttpError(error.error, res.status, error);
+        throw error;
       }
-      return res.json() as T;
+      return res.json();
     },
-    onMutate: () => {
-      toast({
-        title: t("loading"),
-        description: t("loadingDescription"),
-      });
+    onMutate: (variables) => {
+      // …existing onMutate logic (if any)…
     },
-    onError: (error) => {
-      toast({
-        title: t("wentWrong"),
-        description: error.message,
-        variant: "destructive",
+    onError: (error, variables, context) => {
+      // …existing onError logic (if any)…
+      options.onError?.(error, variables, context);
+    },
+    onSuccess: (data, variables, context) => {
+      // Инвалидируем кэш
+      mutationKey.forEach((key) => {
+        if (key) queryClient.invalidateQueries({ queryKey: [key] });
       });
+      options.onSuccess?.(data, variables, context);
     },
     ...options,
   });

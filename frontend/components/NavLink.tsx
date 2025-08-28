@@ -39,17 +39,21 @@ const NavLink: React.FC<NavLinkProps> = ({ href, Icon, name, badge }) => {
     enabled: !!session?.sessionToken,
   });
 
+  const isActive = pathname.startsWith(href);
+
   return (
     <Link
       href={href}
-      className={`flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
-        pathname.startsWith(href) ? "bg-muted text-primary" : ""
+      className={`relative flex items-center gap-3 rounded-lg px-4 py-3 text-foreground/70 transition-all hover:text-primary ${
+        isActive
+          ? "bg-background/90 text-primary font-medium shadow-sm before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:rounded-l-lg before:bg-gradient-primary"
+          : "hover:bg-background/50"
       }`}
     >
-      <Icon className="h-4 w-4" />
-      {name}
+      <Icon className={`h-5 w-5 ${isActive ? "text-primary" : ""}`} />
+      <span>{name}</span>
       {!!notificationCount && (
-        <Badge className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full">
+        <Badge className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-primary text-white">
           {notificationCount}
         </Badge>
       )}

@@ -8,7 +8,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,9 +30,9 @@ import { SkeletonLoader } from "./TableApi";
 import useApiQuery from "@/lib/useApiQuery";
 
 export function StudentTable({
-  selectedStudents,
-  setSelectedStudents,
-}: {
+                               selectedStudents,
+                               setSelectedStudents,
+                             }: {
   selectedStudents: Student[];
   setSelectedStudents: React.Dispatch<React.SetStateAction<Student[]>>;
 }) {
@@ -45,123 +45,151 @@ export function StudentTable({
     `student/list?page=${page}&name=${search}`,
     ["students", page, search]
   );
-  const [rowSelection, setRowSelection] = React.useState({});
-  const { data: selectedStudentsData } = useQuery<{ studentList: Student[] }>({
-    queryKey: ["selectedStudents", rowSelection],
-    queryFn: async () => {
-      const studentIds = Object.keys(rowSelection).map((e) => Number(e));
-      if (studentIds.length === 0) {
-        return { studentList: [] };
-      }
-      const data = { studentIds };
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/student/ids`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.sessionToken}`,
-          },
-          body: JSON.stringify(data),
-        }
-      );
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error);
-      }
-      return response.json();
-    },
-    enabled: !!session,
-  });
 
-  useEffect(() => {
-    if (!selectedStudentsData) return;
-    setSelectedStudents(selectedStudentsData.studentList);
-  }, [selectedStudentsData, setSelectedStudents]);
+  const selectedStudentIds = useMemo(
+    () => new Set(selectedStudents.map((student) => student.id.toString())),
+    [selectedStudents]
+  );
 
-  const columns: ColumnDef<Student>[] = [
-    {
-      id: "selectStudent",
-      header: ({ table }) => (
-        <Checkbox
-          checked={
-            table.getIsAllPageRowsSelected() ||
-            (table.getIsSomePageRowsSelected() && "indeterminate")
+  const rowSelection = useMemo(() => {
+    const selection: Record<string, boolean> = {};
+    selectedStudentIds.forEach((id) => {
+      selection[id] = true;
+    });
+    return selection;
+  }, [selectedStudentIds]);
+
+  const { data: selectedStudentsData, refetch: refetchSelectedStudents } =
+    useQuery<{ studentList: Student[] }>({
+      queryKey: ["selectedStudents", Array.from(selectedStudentIds)],
+      queryFn: async () => {
+        if (selectedStudentIds.size === 0) return { studentList: [] };
+        const data = { studentIds: Array.from(selectedStudentIds) };
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/student/ids`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session?.sessionToken}`,
+            },
+            body: JSON.stringify(data),
           }
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
-        />
-      ),
-      enableSorting: false,
-      enableHiding: false,
-    },
-    {
-      accessorKey: "name",
-      header: t("name"),
-      cell: ({ row }) => (
-        <div className="capitalize">
-          {tName("name", { ...row?.original, parents: "" })}
-        </div>
-      ),
-    },
-    {
-      accessorKey: "email",
-      header: ({ column }) => <div className="text-left">{t("email")}</div>,
-      cell: ({ row }) => (
-        <div className="lowercase">{row.getValue("email")}</div>
-      ),
-    },
-    {
-      accessorKey: "student_number",
-      header: () => <div className="text-left">{t("studentId")}</div>,
-      cell: ({ row }) => {
-        return (
-          <div className="text-left font-medium">
-            {row.getValue("student_number")}
-          </div>
         );
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error);
+        }
+        return response.json();
       },
-    },
-    {
-      accessorKey: "phone_number",
-      header: t("phoneNumber"),
-      cell: ({ row }) => (
-        <div className="text-left">{row.getValue("phone_number")}</div>
-      ),
-    },
-  ];
+      enabled: !!session && selectedStudentIds.size > 0,
+    });
+
+  const columns: ColumnDef<Student>[] = useMemo(
+    () => [
+      {
+        id: "selectStudent",
+        header: ({ table }) => (
+          <Checkbox
+            checked={
+              table.getIsAllPageRowsSelected() ||
+              (table.getIsSomePageRowsSelected() && "indeterminate")
+            }
+            onCheckedChange={(value) =>
+              table.toggleAllPageRowsSelected(!!value)
+            }
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label="Select row"
+          />
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      },
+      {
+        accessorKey: "name",
+        header: t("name"),
+        cell: ({ row }) => (
+          <div className="capitalize">
+            {tName("name", { ...row?.original, parents: "" })}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "email",
+        header: ({ column }) => <div className="text-left">{t("email")}</div>,
+        cell: ({ row }) => (
+          <div className="lowercase">{row.getValue("email")}</div>
+        ),
+      },
+      {
+        accessorKey: "student_number",
+        header: () => <div className="text-left">{t("studentId")}</div>,
+        cell: ({ row }) => {
+          return (
+            <div className="text-left font-medium">
+              {row.getValue("student_number")}
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "phone_number",
+        header: t("phoneNumber"),
+        cell: ({ row }) => (
+          <div className="text-left">{row.getValue("phone_number")}</div>
+        ),
+      },
+    ],
+    [t, tName]
+  );
 
   const table = useReactTable({
-    data: React.useMemo(() => data?.students ?? [], [data]),
+    data: useMemo(() => data?.students ?? [], [data]),
     columns,
     getCoreRowModel: getCoreRowModel(),
-    onRowSelectionChange: setRowSelection,
+    onRowSelectionChange: (updater) => {
+      if (typeof updater === "function") {
+        const newSelection = updater(rowSelection);
+        const newSelectedStudents =
+          data?.students.filter((student) => newSelection[student.id]) || [];
+        setSelectedStudents((prev) => {
+          const prevIds = new Set(prev.map((s) => s.id));
+          return [
+            ...prev.filter((s) => newSelection[s.id]),
+            ...newSelectedStudents.filter((s) => !prevIds.has(s.id)),
+          ];
+        });
+      }
+    },
     getRowId: (row) => row.id.toString(),
     state: {
       rowSelection,
     },
   });
 
-  useEffect(() => {
-    table.getRowModel().rows.forEach((row) => {
-      if (selectedStudents.find((student) => student.id === row.original.id)) {
-        row.toggleSelected(true);
-      } else {
-        row.toggleSelected(false);
-      }
-    });
-  }, [selectedStudents, table]);
+  const handleDeleteStudent = useCallback(
+    (student: Student) => {
+      setSelectedStudents((prev) => prev.filter((s) => s.id !== student.id));
+    },
+    [setSelectedStudents]
+  );
 
-  function handleDeleteStudent(student: Student) {
-    setSelectedStudents((prev) => prev.filter((s) => s.id !== student.id));
-  }
+  useEffect(() => {
+    if (selectedStudentsData) {
+      setSelectedStudents((prevSelected) => {
+        const newSelectedMap = new Map(
+          selectedStudentsData.studentList.map((s) => [s.id, s])
+        );
+        return prevSelected.map((s) => newSelectedMap.get(s.id) || s);
+      });
+    }
+  }, [selectedStudentsData, setSelectedStudents]);
 
   return (
     <div className="w-full space-y-4 mt-4">
@@ -199,9 +227,9 @@ export function StudentTable({
                     {header.isPlaceholder
                       ? null
                       : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
+                        header.column.columnDef.header,
+                        header.getContext()
+                      )}
                   </TableHead>
                 ))}
               </TableRow>

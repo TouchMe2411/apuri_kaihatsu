@@ -12,10 +12,10 @@ export default function NothingHere() {
         className={`${theme.resolvedTheme === "dark" && `invert-[50]`}`}
         src="/assets/cat.svg"
         alt="Nothing here Cat"
-        width={200}
-        height={200}
+        width={250}
+        height={250}
       />
-      <h1 className="text-4xl text-neutral-200">Nothing Here</h1>
+      {/* <h1 className="text-3xl text-violet-500">Nothing Here</h1> */}
     </div>
   );
 }
