@@ -16,6 +16,9 @@ import DisplayProperty from "@/components/DisplayProperty";
 import { useState } from "react";
 import NotFound from "@/components/NotFound";
 import useApiQuery from "@/lib/useApiQuery";
+import { Badge } from "@/components/ui/badge";
+
+type SimpleGroup = { id: number; name: string };
 
 export default function ThisGroup({
   params: { groupId },
@@ -30,6 +33,12 @@ export default function ThisGroup({
     pagination: pagination;
     members: Student[];
   }>(`group/${groupId}?page=${studentPage}`, ["group", groupId, studentPage]);
+
+  const { data } = useApiQuery<{
+    group: SimpleGroup;
+    parent_groups: SimpleGroup[];
+    child_groups: SimpleGroup[];
+  }>(`group/${groupId}`, ["group", groupId]);
 
   const studentColumns: ColumnDef<Student>[] = [
     {
@@ -59,6 +68,10 @@ export default function ThisGroup({
   const groupDate = FormatDate(groupData?.group.created_at ?? "");
 
   if (isError) return <NotFound />;
+  if (!data) return null;
+
+  const parents = data.parent_groups ?? [];
+  const children = data.child_groups ?? [];
 
   return (
     <div className="space-y-4">
@@ -100,6 +113,43 @@ export default function ThisGroup({
             />
           </div>
         </CardContent>
+      </Card>
+      <Card className="p-6 space-y-4">
+        <h3 className="text-lg font-semibold">関連グループ</h3>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          <div>
+            <div className="text-sm text-muted-foreground mb-2">親グループ</div>
+            <div className="flex flex-wrap gap-2">
+              {parents.length === 0 ? (
+                <span className="text-muted-foreground">なし</span>
+              ) : (
+                parents.map((g) => (
+                  <Link key={g.id} href={`/groups/${g.id}`}>
+                    <Badge variant="outline" className="cursor-pointer">
+                      {g.name}
+                    </Badge>
+                  </Link>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-sm text-muted-foreground mb-2">子グループ</div>
+            <div className="flex flex-wrap gap-2">
+              {children.length === 0 ? (
+                <span className="text-muted-foreground">なし</span>
+              ) : (
+                children.map((g) => (
+                  <Link key={g.id} href={`/groups/${g.id}`}>
+                    <Badge className="cursor-pointer">{g.name}</Badge>
+                  </Link>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       </Card>
     </div>
   );
